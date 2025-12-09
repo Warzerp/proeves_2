@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Health - WebSocket Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .response-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .response-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .response-text {
+            line-height: 1.8;
+            white-space: pre-wrap;
+            color: #333;
+        }
+        
+        .metadata {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        
+        .metadata-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .metadata-item:last-child {
+            border-bottom: none;
+        }
+        
+        .metadata-label {
+            font-weight: 600;
+            color: #666;
+        }
+        
+        .metadata-value {
+            color: #333;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 Smart Health - WebSocket Test</h1>
+        <p class="subtitle">Cliente de prueba para el sistema RAG de Smart Health</p>
+        
+        <div class="form-group">
+            <label for="token">🔐 Token JWT:</label>
+            <input type="text" id="token" placeholder="Pega aquí tu token JWT desde /docs">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                Obtén el token desde <a href="http://localhost:8088/docs" target="_blank">http://localhost:8088/docs</a> → POST /auth/login
+            </small>
+        </div>
+        
+        <div class="form-group">
+            <label for="docType">📄 Tipo de Documento:</label>
+            <select id="docType">
+                <option value="1">CC - Cédula de Ciudadanía</option>
+                <option value="2">CE - Cédula de Extranjería</option>
+                <option value="3">TI - Tarjeta de Identidad</option>
+                <option value="4">PA - Pasaporte</option>
+                <option value="5">RC - Registro Civil</option>
+                <option value="8">CD - Carné Diplomático</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="docNumber">🔢 Número de Documento:</label>
+            <input type="text" id="docNumber" placeholder="Ej: 123456789">
+        </div>
+        
+        <div class="form-group">
+            <label for="question">💬 Pregunta:</label>
+            <textarea id="question" placeholder="Ej: ¿Cuáles son las últimas citas médicas del paciente?">¿Cuáles son las últimas citas médicas del paciente?</textarea>
+        </div>
+        
+        <button class="btn" id="sendBtn" onclick="sendQuery()">
+            🚀 Enviar Consulta
+        </button>
+        
+        <div id="statusContainer"></div>
+        
+        <div id="responseContainer" class="hidden">
+            <div class="response-container">
+                <div class="response-title">🤖 Respuesta del LLM:</div>
+                <div class="response-text" id="responseText"></div>
+            </div>
+            
+            <div class="metadata" id="metadata"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let fullResponse = "";
+        
+        function showStatus(message, type = 'info') {
+            const container = document.getElementById('statusContainer');
+            container.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function sendQuery() {
+            const token = document.getElementById('token').value.trim();
+            const docType = document.getElementById('docType').value;
+            const docNumber = document.getElementById('docNumber').value.trim();
+            const question = document.getElementById('question').value.trim();
+            
+            // Validaciones
+            if (!token) {
+                showStatus('❌ Por favor ingresa el token JWT', 'error');
+                return;
+            }
+            
+            if (!docNumber) {
+                showStatus('❌ Por favor ingresa el número de documento', 'error');
+                return;
+            }
+            
+            if (!question) {
+                showStatus('❌ Por favor ingresa una pregunta', 'error');
+                return;
+            }
+            
+            // Limpiar respuesta anterior
+            document.getElementById('responseContainer').classList.add('hidden');
+            document.getElementById('responseText').textContent = '';
+            fullResponse = "";
+            
+            // Deshabilitar botón
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Conectando...';
+            
+            // Conectar WebSocket
+            const wsUrl = `ws://localhost:8088/ws/chat?token=${token}`;
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                showStatus('✅ Conectado al WebSocket', 'success');
+                btn.textContent = '⏳ Procesando...';
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'connected':
+                        showStatus(`✅ ${data.message}`, 'success');
+                        
+                        // Enviar consulta
+                        const query = {
+                            type: "query",
+                            session_id: `session-${Date.now()}`,
+                            document_type_id: parseInt(docType),
+                            document_number: docNumber,
+                            question: question
+                        };
+                        
+                        ws.send(JSON.stringify(query));
+                        break;
+                        
+                    case 'status':
+                        showStatus(data.message, 'info');
+                        break;
+                        
+                    case 'stream_start':
+                        showStatus('🎬 Generando respuesta...', 'info');
+                        document.getElementById('responseContainer').classList.remove('hidden');
+                        break;
+                        
+                    case 'token':
+                        fullResponse += data.token;
+                        document.getElementById('responseText').textContent = fullResponse;
+                        break;
+                        
+                    case 'stream_end':
+                        showStatus('✅ Respuesta completada', 'success');
+                        break;
+                        
+                    case 'complete':
+                        showStatus('✅ Consulta completada exitosamente', 'success');
+                        
+                        // Mostrar metadata
+                        const meta = data.metadata;
+                        const patient = data.patient_info;
+                        document.getElementById('metadata').innerHTML = `
+                            <div class="response-title">📊 Información de la Consulta:</div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Paciente:</span>
+                                <span class="metadata-value">${patient.full_name}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Documento:</span>
+                                <span class="metadata-value">${patient.document_type} ${patient.document_number}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Registros analizados:</span>
+                                <span class="metadata-value">${meta.total_records_analyzed}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Chunks vectoriales:</span>
+                                <span class="metadata-value">${meta.vector_chunks_used}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Tiempo de consulta:</span>
+                                <span class="metadata-value">${meta.query_time_ms} ms</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Modelo:</span>
+                                <span class="metadata-value">${data.answer.model_used}</span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Confianza:</span>
+                                <span class="metadata-value">${(data.answer.confidence * 100).toFixed(1)}%</span>
+                            </div>
+                        `;
+                        
+                        btn.disabled = false;
+                        btn.textContent = '🚀 Enviar Consulta';
+                        ws.close();
+                        break;
+                        
+                    case 'error':
+                        showStatus(`❌ Error: ${data.error.message}`, 'error');
+                        btn.disabled = false;
+                        btn.textContent = '🚀 Enviar Consulta';
+                        ws.close();
+                        break;
+                }
+            };
+            
+            ws.onerror = (error) => {
+                showStatus('❌ Error de conexión. ¿Está corriendo FastAPI en localhost:8088?', 'error');
+                btn.disabled = false;
+                btn.textContent = '🚀 Enviar Consulta';
+            };
+            
+            ws.onclose = () => {
+                console.log('Conexión cerrada');
+            };
+        }
+    </script>
+</body>
+</html>
