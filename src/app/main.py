@@ -193,22 +193,41 @@ def root():
         }
     }
 
+# src/app/main.py - Reemplazar el endpoint /health con esta versión corregida
+
 @app.get("/health", tags=["Health"])
 def health():
     """Health check endpoint"""
+    db_status = "disconnected"
+    error_details = None
+    
     try:
         # Verificar conexión a base de datos
         from .database.database import SessionLocal
+        from sqlalchemy import text
+        
         db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
-        db_status = "connected"
+        try:
+            # Intentar una query simple
+            result = db.execute(text("SELECT 1"))
+            result.scalar()
+            db_status = "connected"
+        except Exception as db_error:
+            db_status = "disconnected"
+            error_details = str(db_error)
+            logger.error(f"Database health check failed: {db_error}")
+        finally:
+            db.close()
+            
     except Exception as e:
-        logger.error(f"Database health check failed: {str(e)}")
-        db_status = "disconnected"
+        db_status = "error"
+        error_details = str(e)
+        logger.error(f"Database health check error: {e}")
     
-    return {
-        "status": "healthy" if db_status == "connected" else "unhealthy",
+    is_healthy = db_status == "connected"
+    
+    response = {
+        "status": "healthy" if is_healthy else "unhealthy",
         "timestamp": time.time(),
         "environment": settings.app_env,
         "services": {
@@ -218,7 +237,12 @@ def health():
             "websocket": "enabled"
         }
     }
-
+    
+    # Agregar detalles de error en desarrollo
+    if not is_healthy and settings.app_env == "development" and error_details:
+        response["error"] = error_details
+    
+    return response
 # ============================================================
 # STARTUP/SHUTDOWN EVENTS
 # ============================================================

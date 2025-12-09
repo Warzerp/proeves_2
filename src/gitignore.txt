@@ -1,7 +1,0 @@
-# Folders
-__pycache__/
-venv/
-
-# files
-.env
-
