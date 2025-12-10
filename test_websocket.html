@@ -183,7 +183,7 @@
             <label for="token">🔐 Token JWT:</label>
             <input type="text" id="token" placeholder="Pega aquí tu token JWT desde /docs">
             <small style="color: #666; display: block; margin-top: 5px;">
-                Obtén el token desde <a href="http://localhost:8088/docs" target="_blank">http://localhost:8088/docs</a> → POST /auth/login
+                Obtén el token desde <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a> → POST /auth/login
             </small>
         </div>
         
@@ -267,7 +267,7 @@
             btn.textContent = '⏳ Conectando...';
             
             // Conectar WebSocket
-            const wsUrl = `ws://localhost:8088/ws/chat?token=${token}`;
+            const wsUrl = `ws://localhost:8000/ws/chat?token=${token}`;
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
@@ -365,7 +365,7 @@
             };
             
             ws.onerror = (error) => {
-                showStatus('❌ Error de conexión. ¿Está corriendo FastAPI en localhost:8088?', 'error');
+                showStatus('❌ Error de conexión. ¿Está corriendo FastAPI en localhost:8000?', 'error');
                 btn.disabled = false;
                 btn.textContent = '🚀 Enviar Consulta';
             };
@@ -376,4 +376,4 @@
         }
     </script>
 </body>
-</html>
+</html>a

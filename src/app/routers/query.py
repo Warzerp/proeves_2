@@ -1,12 +1,13 @@
 # src/app/routers/query.py
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Literal, Union
+from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import logging
 import time
 import asyncio
+import re
 
 from app.services.llm_service import llm_service
 from app.services.clinical_service import fetch_patient_and_records
@@ -32,7 +33,78 @@ class QueryInput(BaseModel):
     question: str
 
 
-# === FUNCIONES AUXILIARES ===
+# === FUNCIONES DE VALIDACIÓN Y SANITIZACIÓN ===
+
+def sanitize_document_number(doc_number: str) -> str:
+    """
+    Sanitiza el número de documento eliminando caracteres peligrosos.
+    ✅ FIX JAILBREAK: Solo permite letras, números y guiones
+    """
+    # Eliminar espacios
+    doc_number = doc_number.strip()
+    
+    # Solo permitir: letras (A-Z, a-z), números (0-9), guiones (-), sin espacios
+    sanitized = re.sub(r'[^A-Za-z0-9\-]', '', doc_number)
+    
+    # Limitar longitud máxima
+    if len(sanitized) > 50:
+        sanitized = sanitized[:50]
+    
+    return sanitized
+
+
+def validate_query_input(input_data: QueryInput) -> tuple[bool, Optional[str]]:
+    """
+    Valida los datos de entrada para prevenir inyecciones.
+    ✅ FIX JAILBREAK: Validación estricta
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # Validar document_type_id
+    valid_doc_types = [1, 2, 3, 4, 5, 6, 7, 8]
+    if input_data.document_type_id not in valid_doc_types:
+        return False, f"Tipo de documento inválido: {input_data.document_type_id}"
+    
+    # Validar document_number
+    if not input_data.document_number or len(input_data.document_number.strip()) == 0:
+        return False, "Número de documento vacío"
+    
+    sanitized_doc = sanitize_document_number(input_data.document_number)
+    if not sanitized_doc:
+        return False, "Número de documento contiene caracteres inválidos"
+    
+    if len(sanitized_doc) < 3:
+        return False, "Número de documento muy corto (mínimo 3 caracteres)"
+    
+    # Validar pregunta
+    if not input_data.question or len(input_data.question.strip()) < 5:
+        return False, "La pregunta debe tener al menos 5 caracteres"
+    
+    if len(input_data.question) > 1000:
+        return False, "La pregunta no puede exceder 1000 caracteres"
+    
+    # Detectar intentos de inyección SQL básicos
+    dangerous_patterns = [
+        r"(\bOR\b.*=.*)",
+        r"(\bAND\b.*=.*)",
+        r"(DROP\s+TABLE)",
+        r"(DELETE\s+FROM)",
+        r"(INSERT\s+INTO)",
+        r"(UPDATE\s+\w+\s+SET)",
+        r"(--\s*$)",
+        r"(;.*SELECT)",
+        r"(\bUNION\b.*\bSELECT\b)",
+    ]
+    
+    combined_input = f"{input_data.document_number} {input_data.question}"
+    for pattern in dangerous_patterns:
+        if re.search(pattern, combined_input, re.IGNORECASE):
+            logger.warning(f"⚠️ Posible intento de inyección SQL detectado: {pattern}")
+            return False, "Query contiene patrones potencialmente peligrosos"
+    
+    return True, None
+
 
 def get_iso_timestamp() -> str:
     """Retorna timestamp en formato ISO 8601 con Z (UTC)"""
@@ -186,13 +258,11 @@ def build_sources_from_real_data(
     similar_chunks: List,
     sequence_counter: int
 ) -> List[Dict]:
-    """
-    Construye lista de fuentes siguiendo el formato EXACTO de la especificación.
-    """
+    """Construye lista de fuentes siguiendo el formato EXACTO de la especificación"""
     sources = []
     current_sequence = sequence_counter
-
-    # CITAS - formato especificación EXACTO
+    
+    # CITAS
     try:
         for apt in clinical_records.appointments[:5]:
             apt_id = getattr(apt, 'appointment_id', None)
@@ -201,8 +271,6 @@ def build_sources_from_real_data(
                 
             apt_date = getattr(apt, 'appointment_date', None)
             apt_reason = getattr(apt, 'reason', None)
-            
-            # ✅ Extraer información del doctor (ahora viene del JOIN)
             doctor_name = getattr(apt, 'doctor_name', None)
             specialty_name = getattr(apt, 'specialty_name', None)
             medical_license = getattr(apt, 'medical_license_number', None)
@@ -212,10 +280,9 @@ def build_sources_from_real_data(
                 "type": "appointment",
                 "appointment_id": int(apt_id),
                 "date": str(apt_date) if apt_date else None,
-                "relevance_score": 0.98  # Alta relevancia para datos directos
+                "relevance_score": 0.98
             }
             
-            # Agregar doctor si existe (formato EXACTO)
             if doctor_name or specialty_name:
                 doctor_info = {}
                 if doctor_name:
@@ -237,7 +304,7 @@ def build_sources_from_real_data(
     except Exception as e:
         logger.warning(f"Error construyendo sources de appointments: {e}")
 
-    # DIAGNÓSTICOS - formato especificación EXACTO
+    # DIAGNÓSTICOS
     try:
         for diag in clinical_records.diagnoses[:5]:
             diag_id = getattr(diag, 'diagnosis_id', None)
@@ -246,7 +313,6 @@ def build_sources_from_real_data(
                 
             diag_desc = getattr(diag, 'description', 'Sin descripción')
             icd_code = getattr(diag, 'icd_code', None)
-            # ✅ Fecha del diagnóstico (ahora viene del medical_record)
             diag_date = getattr(diag, 'diagnosis_date', None)
             
             source = {
@@ -260,7 +326,6 @@ def build_sources_from_real_data(
             if icd_code:
                 source["icd_code"] = icd_code
             if diag_date:
-                # ✅ Convertir datetime a string solo con fecha
                 source["date"] = str(diag_date.date()) if hasattr(diag_date, 'date') else str(diag_date)
                 
             sources.append(source)
@@ -276,7 +341,6 @@ def build_sources_from_real_data(
             if not presc_id:
                 continue
                 
-            # ✅ Nombre del medicamento (ahora viene del JOIN)
             medication = getattr(presc, 'medication_name', 'Medicamento no especificado')
             presc_date = getattr(presc, 'prescription_date', None)
             dosage = getattr(presc, 'dosage', None)
@@ -291,7 +355,6 @@ def build_sources_from_real_data(
                 "relevance_score": 0.92
             }
             
-            # Agregar dosage y frequency si existen
             if dosage:
                 source["dosage"] = dosage
             if frequency:
@@ -380,16 +443,36 @@ def _generate_fallback_response(clinical_records: ClinicalRecords, question: str
 @router.post("/")
 async def query_patient(input_data: QueryInput, db: Session = Depends(get_db)):
     """
-    Endpoint principal de consulta RAG.
-    Formato de salida EXACTO según especificación del proyecto.
+    Endpoint principal de consulta RAG con validación de seguridad.
+    ✅ FIX JAILBREAK: Validación estricta de inputs
     """
     start_time = time.time()
     timestamp = get_iso_timestamp()
     sequence_chat_id = 1
 
+    # ✅ VALIDACIÓN DE SEGURIDAD
+    is_valid, error_msg = validate_query_input(input_data)
+    if not is_valid:
+        logger.warning(f"⚠️ Input inválido rechazado: {error_msg}")
+        return {
+            "status": "error",
+            "session_id": input_data.session_id,
+            "sequence_chat_id": sequence_chat_id,
+            "timestamp": get_iso_timestamp(),
+            "error": {
+                "code": "INVALID_INPUT",
+                "message": error_msg,
+                "details": "Verifica que los datos sean correctos"
+            }
+        }
+    
+    # ✅ SANITIZAR NÚMERO DE DOCUMENTO
+    sanitized_doc_number = sanitize_document_number(input_data.document_number)
+    logger.info(f"📝 Query para paciente: {input_data.document_type_id}-{sanitized_doc_number}")
+
     try:
         return await asyncio.wait_for(
-            _process_query(input_data, db, start_time, timestamp, sequence_chat_id),
+            _process_query(input_data, db, start_time, timestamp, sequence_chat_id, sanitized_doc_number),
             timeout=TOTAL_REQUEST_TIMEOUT_SECONDS
         )
     
@@ -431,18 +514,19 @@ async def _process_query(
     db: Session,
     start_time: float,
     timestamp: str,
-    sequence_chat_id: int
+    sequence_chat_id: int,
+    sanitized_doc_number: str  # ✅ Usar documento sanitizado
 ) -> dict:
     """Lógica principal del procesamiento de la query"""
     
     logger.info(f"Procesando query - Session: {input_data.session_id}")
 
-    # 1. BUSCAR PACIENTE
+    # 1. BUSCAR PACIENTE (usando documento sanitizado)
     try:
         patient_info, clinical_data = fetch_patient_and_records(
             db=db,
             document_type_id=input_data.document_type_id,
-            document_number=input_data.document_number
+            document_number=sanitized_doc_number  # ✅ Sanitizado
         )
     except Exception as e:
         logger.error(f"Error en búsqueda de paciente: {type(e).__name__}")
@@ -467,7 +551,7 @@ async def _process_query(
             "timestamp": get_iso_timestamp(),
             "error": {
                 "code": "PATIENT_NOT_FOUND",
-                "message": f"No se encontró paciente con documento {doc_type} {input_data.document_number}",
+                "message": f"No se encontró paciente con documento {doc_type} {sanitized_doc_number}",
                 "details": "Verifique el tipo y número de documento"
             }
         }

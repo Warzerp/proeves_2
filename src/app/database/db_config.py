@@ -40,9 +40,9 @@ class Settings(BaseSettings):
 
 # Mostrar advertencia si no encuentra el .env
 if not ENV_PATH.exists():
-    print(f"⚠️  Archivo .env no encontrado en: {ENV_PATH}")
+    print(f"  Archivo .env no encontrado en: {ENV_PATH}")
     print(f"   Crea el archivo .env en la raíz del proyecto")
 else:
-    print(f"✅ Archivo .env encontrado en: {ENV_PATH}")
+    print(f" Archivo .env encontrado en: {ENV_PATH}")
 
 settings = Settings()

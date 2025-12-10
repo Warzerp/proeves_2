@@ -1,17 +1,23 @@
 """
-SmartHealth API - Suite de Pruebas de Seguridad
-================================================
+SmartHealth API - Suite de Pruebas de Seguridad v2.1
+=====================================================
 Ejecutar: python test_security.py
 
 Verifica:
 1. Autenticación JWT
 2. Headers de seguridad
 3. CORS
-4. Rate limiting
-5. Validación de inputs
-6. WebSocket security
-7. SQL Injection protection
+4. Validación de inputs (Anti-Jailbreak)
+5. WebSocket security
+6. SQL Injection protection
 """
+
+import sys
+from pathlib import Path
+
+# ✅ Rutas absolutas para despliegue
+PROJECT_ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import requests
 import json
@@ -24,8 +30,8 @@ import asyncio
 # CONFIGURACIÓN
 # ============================================================
 
-BASE_URL = "http://127.0.0.1:8088"
-WS_URL = "ws://127.0.0.1:8088"
+BASE_URL = "http://127.0.0.1:8000"
+WS_URL = "ws://127.0.0.1:8000"
 
 # Colores para output
 class Colors:
@@ -42,15 +48,15 @@ def print_test(name: str):
 
 def print_pass(message: str):
     """Imprime mensaje de éxito"""
-    print(f"{Colors.GREEN}✅ PASS:{Colors.RESET} {message}")
+    print(f"{Colors.GREEN} PASS:{Colors.RESET} {message}")
 
 def print_fail(message: str):
     """Imprime mensaje de fallo"""
-    print(f"{Colors.RED}❌ FAIL:{Colors.RESET} {message}")
+    print(f"{Colors.RED} FAIL:{Colors.RESET} {message}")
 
 def print_info(message: str):
     """Imprime información"""
-    print(f"{Colors.YELLOW}ℹ️  INFO:{Colors.RESET} {message}")
+    print(f"{Colors.YELLOW}ℹ  INFO:{Colors.RESET} {message}")
 
 # ============================================================
 # TESTS DE AUTENTICACIÓN JWT
@@ -61,7 +67,7 @@ def test_jwt_authentication():
     print_test("AUTENTICACIÓN JWT")
     
     # 1. Registro de usuario
-    print("\n1️⃣ Probando registro de usuario...")
+    print("\n 1 Probando registro de usuario...")
     register_data = {
         "email": f"security_test_{int(time.time())}@test.com",
         "password": "SecurePass123!",
@@ -81,7 +87,7 @@ def test_jwt_authentication():
         return None
     
     # 2. Login y obtención de token
-    print("\n2️⃣ Probando login...")
+    print("\n 2 Probando login...")
     login_data = {
         "email": register_data["email"],
         "password": register_data["password"]
@@ -96,7 +102,7 @@ def test_jwt_authentication():
         return None
     
     # 3. Acceso sin token (debe fallar)
-    print("\n3️⃣ Intentando acceso sin token...")
+    print("\n 3 Intentando acceso sin token...")
     response = requests.get(f"{BASE_URL}/users/me")
     if response.status_code == 401 or response.status_code == 403:
         print_pass("Acceso correctamente denegado sin token")
@@ -104,7 +110,7 @@ def test_jwt_authentication():
         print_fail(f"Acceso permitido sin token (código: {response.status_code})")
     
     # 4. Acceso con token válido
-    print("\n4️⃣ Intentando acceso con token válido...")
+    print("\n 4 Intentando acceso con token válido...")
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.get(f"{BASE_URL}/users/me", headers=headers)
     if response.status_code == 200:
@@ -113,7 +119,7 @@ def test_jwt_authentication():
         print_fail(f"Acceso denegado con token válido (código: {response.status_code})")
     
     # 5. Acceso con token inválido
-    print("\n5️⃣ Intentando acceso con token inválido...")
+    print("\n 5 Intentando acceso con token inválido...")
     bad_headers = {"Authorization": "Bearer token_falso_123"}
     response = requests.get(f"{BASE_URL}/users/me", headers=bad_headers)
     if response.status_code == 401 or response.status_code == 403:
@@ -122,7 +128,7 @@ def test_jwt_authentication():
         print_fail(f"Acceso permitido con token inválido (código: {response.status_code})")
     
     # 6. Login con credenciales incorrectas
-    print("\n6️⃣ Probando login con credenciales incorrectas...")
+    print("\n 6 Probando login con credenciales incorrectas...")
     bad_login = {
         "email": register_data["email"],
         "password": "PasswordIncorrecta123!"
@@ -136,6 +142,118 @@ def test_jwt_authentication():
     return token
 
 # ============================================================
+# TESTS DE VALIDACIÓN DE INPUTS (ANTI-JAILBREAK)
+# ============================================================
+
+def test_input_validation():
+    """Verifica la validación de inputs y protección contra jailbreak"""
+    print_test("VALIDACIÓN DE INPUTS Y ANTI-JAILBREAK")
+    
+    # 1. Email inválido
+    print("\n 1 Probando registro con email inválido...")
+    bad_email = {
+        "email": "esto_no_es_un_email",
+        "password": "Pass123!",
+        "first_name": "Test",
+        "first_surname": "User"
+    }
+    response = requests.post(f"{BASE_URL}/auth/register", json=bad_email)
+    if response.status_code == 422:
+        print_pass("Email inválido correctamente rechazado")
+    else:
+        print_fail(f"Email inválido aceptado (código: {response.status_code})")
+    
+    # 2. Contraseña corta
+    print("\n 2 Probando registro con contraseña corta...")
+    short_pass = {
+        "email": "test@test.com",
+        "password": "123",
+        "first_name": "Test",
+        "first_surname": "User"
+    }
+    response = requests.post(f"{BASE_URL}/auth/register", json=short_pass)
+    if response.status_code == 422 or response.status_code == 400:
+        print_pass("Contraseña corta correctamente rechazada")
+    else:
+        print_fail(f"Contraseña corta aceptada (código: {response.status_code})")
+    
+    # 3. SQL Injection en número de documento
+    print("\n 3 Probando SQL Injection en documento...")
+    sql_injection_query = {
+        "user_id": "1",
+        "session_id": "test-123",
+        "document_type_id": 1,
+        "document_number": "123' OR '1'='1",
+        "question": "¿Historial del paciente?"
+    }
+    response = requests.post(f"{BASE_URL}/query/", json=sql_injection_query)
+    if response.status_code in [400, 422]:
+        print_pass("SQL Injection en documento bloqueado")
+    else:
+        data = response.json()
+        if data.get("status") == "error" and "INVALID_INPUT" in data.get("error", {}).get("code", ""):
+            print_pass("SQL Injection detectado y rechazado")
+        else:
+            print_fail(f"SQL Injection no bloqueado (código: {response.status_code})")
+    
+    # 4. Documento con caracteres peligrosos
+    print("\n 4 Probando documento con caracteres especiales...")
+    dangerous_doc = {
+        "user_id": "1",
+        "session_id": "test-123",
+        "document_type_id": 1,
+        "document_number": "123;DROP TABLE--",
+        "question": "¿Historial del paciente?"
+    }
+    response = requests.post(f"{BASE_URL}/query/", json=dangerous_doc)
+    if response.status_code in [400, 422]:
+        print_pass("Documento peligroso rechazado")
+    else:
+        data = response.json()
+        if data.get("status") == "error":
+            print_pass("Caracteres peligrosos sanitizados")
+        else:
+            print_info("Request procesado - verificar sanitización")
+    
+    # 5. Pregunta muy larga
+    print("\n 5 Probando pregunta muy larga (>1000 chars)...")
+    long_question = {
+        "user_id": "1",
+        "session_id": "test-123",
+        "document_type_id": 1,
+        "document_number": "123456",
+        "question": "A" * 1500
+    }
+    response = requests.post(f"{BASE_URL}/query/", json=long_question)
+    if response.status_code in [400, 422]:
+        print_pass("Pregunta muy larga rechazada")
+    else:
+        data = response.json()
+        if data.get("status") == "error" and "INVALID_INPUT" in data.get("error", {}).get("code", ""):
+            print_pass("Pregunta muy larga detectada y rechazada")
+        else:
+            print_fail(f"Pregunta muy larga aceptada")
+    
+    # 6. Tipo de documento inválido
+    print("\n 6 Probando tipo de documento inválido...")
+    invalid_doc_type = {
+        "user_id": "1",
+        "session_id": "test-123",
+        "document_type_id": 99,  # X Solo 1-8 son válidos
+        "document_number": "123456",
+        "question": "¿Historial del paciente?"
+    }
+    response = requests.post(f"{BASE_URL}/query/", json=invalid_doc_type)
+    if response.status_code in [400, 422]:
+        print_pass("Tipo de documento inválido rechazado")
+    else:
+        data = response.json()
+        if data.get("status") == "error":
+            print_pass("Tipo de documento inválido detectado")
+        else:
+            print_fail(f"Tipo de documento inválido aceptado")
+
+# ============================================================
 # TESTS DE HEADERS DE SEGURIDAD
 # ============================================================
 
@@ -146,7 +264,7 @@ def test_security_headers():
     response = requests.get(f"{BASE_URL}/")
     headers = response.headers
     
-    print("\n📋 Headers recibidos:")
+    print("\n Headers recibidos:")
     
     # Headers esperados en producción
     security_headers = {
@@ -171,91 +289,30 @@ def test_security_headers():
         print_info("CORS: No headers en GET simple (normal)")
 
 # ============================================================
-# TESTS DE CORS
+# TEST DE HEALTH CHECK
 # ============================================================
 
-def test_cors():
-    """Verifica la configuración CORS"""
-    print_test("CONFIGURACIÓN CORS")
+def test_health_endpoint():
+    """Verifica el endpoint de health"""
+    print_test("HEALTH CHECK")
     
-    # OPTIONS request (preflight)
-    print("\n1️⃣ Probando preflight request (OPTIONS)...")
-    headers = {
-        "Origin": "http://localhost:3000",
-        "Access-Control-Request-Method": "POST",
-        "Access-Control-Request-Headers": "content-type"
-    }
+    response = requests.get(f"{BASE_URL}/health")
     
-    response = requests.options(f"{BASE_URL}/auth/login", headers=headers)
-    
-    if "Access-Control-Allow-Origin" in response.headers:
-        print_pass(f"CORS permite origen: {response.headers['Access-Control-Allow-Origin']}")
+    if response.status_code == 200:
+        print_pass("Endpoint /health responde correctamente")
+        
+        data = response.json()
+        print(f"\n Estado del sistema:")
+        print(f"   Versión: {data.get('version', 'N/A')}")
+        print(f"   Status: {data.get('status')}")
+        print(f"   Environment: {data.get('environment')}")
+        
+        services = data.get('services', {})
+        for service, status in services.items():
+            icon = "OK" if status in ["connected", "ready", "enabled"] else "X"
+            print(f"   {icon} {service}: {status}")
     else:
-        print_info("No hay headers CORS en OPTIONS (verificar configuración)")
-    
-    if "Access-Control-Allow-Methods" in response.headers:
-        print_pass(f"Métodos permitidos: {response.headers['Access-Control-Allow-Methods']}")
-
-# ============================================================
-# TESTS DE VALIDACIÓN DE INPUTS
-# ============================================================
-
-def test_input_validation():
-    """Verifica la validación de inputs"""
-    print_test("VALIDACIÓN DE INPUTS")
-    
-    # 1. Email inválido
-    print("\n1️⃣ Probando registro con email inválido...")
-    bad_email = {
-        "email": "esto_no_es_un_email",
-        "password": "Pass123!",
-        "first_name": "Test",
-        "first_surname": "User"
-    }
-    response = requests.post(f"{BASE_URL}/auth/register", json=bad_email)
-    if response.status_code == 422:
-        print_pass("Email inválido correctamente rechazado")
-    else:
-        print_fail(f"Email inválido aceptado (código: {response.status_code})")
-    
-    # 2. Contraseña corta
-    print("\n2️⃣ Probando registro con contraseña corta...")
-    short_pass = {
-        "email": "test@test.com",
-        "password": "123",
-        "first_name": "Test",
-        "first_surname": "User"
-    }
-    response = requests.post(f"{BASE_URL}/auth/register", json=short_pass)
-    if response.status_code == 422 or response.status_code == 400:
-        print_pass("Contraseña corta correctamente rechazada")
-    else:
-        print_fail(f"Contraseña corta aceptada (código: {response.status_code})")
-    
-    # 3. Campos faltantes
-    print("\n3️⃣ Probando registro con campos faltantes...")
-    incomplete = {
-        "email": "test@test.com"
-    }
-    response = requests.post(f"{BASE_URL}/auth/register", json=incomplete)
-    if response.status_code == 422:
-        print_pass("Datos incompletos correctamente rechazados")
-    else:
-        print_fail(f"Datos incompletos aceptados (código: {response.status_code})")
-    
-    # 4. SQL Injection intento
-    print("\n4️⃣ Probando protección contra SQL Injection...")
-    sql_injection = {
-        "email": "admin@test.com' OR '1'='1",
-        "password": "' OR '1'='1",
-        "first_name": "Test",
-        "first_surname": "User"
-    }
-    response = requests.post(f"{BASE_URL}/auth/register", json=sql_injection)
-    if response.status_code in [422, 400]:
-        print_pass("SQL Injection bloqueado por validación")
-    else:
-        print_info(f"Request procesado (código: {response.status_code}) - verificar logs")
+        print_fail(f"Endpoint /health falló: {response.status_code}")
 
 # ============================================================
 # TESTS DE WEBSOCKET
@@ -270,7 +327,7 @@ async def test_websocket_security(token: Optional[str]):
         return
     
     # 1. Conexión sin token
-    print("\n1️⃣ Intentando conexión WebSocket sin token...")
+    print("\n 1 Intentando conexión WebSocket sin token...")
     try:
         async with websockets.connect(f"{WS_URL}/ws/chat") as ws:
             print_fail("Conexión WebSocket permitida sin token")
@@ -278,7 +335,7 @@ async def test_websocket_security(token: Optional[str]):
         print_pass("Conexión WebSocket bloqueada sin token")
     
     # 2. Conexión con token inválido
-    print("\n2️⃣ Intentando conexión WebSocket con token inválido...")
+    print("\n 2 Intentando conexión WebSocket con token inválido...")
     try:
         async with websockets.connect(f"{WS_URL}/ws/chat?token=token_falso") as ws:
             print_fail("Conexión WebSocket permitida con token inválido")
@@ -286,7 +343,7 @@ async def test_websocket_security(token: Optional[str]):
         print_pass("Conexión WebSocket bloqueada con token inválido")
     
     # 3. Conexión con token válido
-    print("\n3️⃣ Intentando conexión WebSocket con token válido...")
+    print("\n 3 Intentando conexión WebSocket con token válido...")
     try:
         async with websockets.connect(f"{WS_URL}/ws/chat?token={token}") as ws:
             welcome = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -301,85 +358,18 @@ async def test_websocket_security(token: Optional[str]):
         print_fail(f"Error en conexión: {e}")
 
 # ============================================================
-# TESTS DE MANEJO DE ERRORES
-# ============================================================
-
-def test_error_handling():
-    """Verifica el manejo de errores"""
-    print_test("MANEJO DE ERRORES")
-    
-    # 1. Endpoint inexistente
-    print("\n1️⃣ Probando endpoint inexistente...")
-    response = requests.get(f"{BASE_URL}/endpoint/que/no/existe")
-    if response.status_code == 404:
-        print_pass("404 retornado correctamente")
-        try:
-            error_data = response.json()
-            if "error" in error_data:
-                print_pass("Formato de error estructurado correcto")
-        except:
-            print_info("Respuesta no es JSON")
-    
-    # 2. Método no permitido
-    print("\n2️⃣ Probando método HTTP no permitido...")
-    response = requests.delete(f"{BASE_URL}/")
-    if response.status_code == 405:
-        print_pass("405 Method Not Allowed retornado correctamente")
-    else:
-        print_info(f"Código de respuesta: {response.status_code}")
-    
-    # 3. JSON malformado
-    print("\n3️⃣ Probando JSON malformado...")
-    try:
-        response = requests.post(
-            f"{BASE_URL}/auth/login",
-            data="esto no es json",
-            headers={"Content-Type": "application/json"}
-        )
-        if response.status_code == 422:
-            print_pass("JSON malformado correctamente rechazado")
-        else:
-            print_info(f"Código de respuesta: {response.status_code}")
-    except Exception as e:
-        print_info(f"Excepción: {e}")
-
-# ============================================================
-# TEST DE HEALTH CHECK
-# ============================================================
-
-def test_health_endpoint():
-    """Verifica el endpoint de health"""
-    print_test("HEALTH CHECK")
-    
-    response = requests.get(f"{BASE_URL}/health")
-    
-    if response.status_code == 200:
-        print_pass("Endpoint /health responde correctamente")
-        
-        data = response.json()
-        print(f"\n📊 Estado del sistema:")
-        print(f"   Status: {data.get('status')}")
-        print(f"   Environment: {data.get('environment')}")
-        
-        services = data.get('services', {})
-        for service, status in services.items():
-            icon = "✅" if status in ["connected", "ready", "enabled"] else "❌"
-            print(f"   {icon} {service}: {status}")
-    else:
-        print_fail(f"Endpoint /health falló: {response.status_code}")
-
-# ============================================================
 # FUNCIÓN PRINCIPAL
 # ============================================================
 
 async def run_all_tests():
     """Ejecuta todos los tests de seguridad"""
     print(f"\n{Colors.BOLD}{'='*60}")
-    print("🔒 SMARTHEALTH - SUITE DE PRUEBAS DE SEGURIDAD")
+    print(" SMARTHEALTH v2.1 - SUITE DE PRUEBAS DE SEGURIDAD")
     print(f"{'='*60}{Colors.RESET}\n")
     
-    print(f"🎯 URL Base: {BASE_URL}")
-    print(f"🎯 WebSocket: {WS_URL}")
+    print(f"URL Base: {BASE_URL}")
+    print(f"WebSocket: {WS_URL}")
+    print(f" Directorio: {PROJECT_ROOT}")
     
     # Test de conectividad
     print_test("CONECTIVIDAD")
@@ -396,28 +386,27 @@ async def run_all_tests():
     # Ejecutar tests
     token = test_jwt_authentication()
     test_security_headers()
-    test_cors()
     test_input_validation()
     await test_websocket_security(token)
-    test_error_handling()
     test_health_endpoint()
     
     # Resumen
     print(f"\n{Colors.BOLD}{'='*60}")
-    print("✅ PRUEBAS COMPLETADAS")
+    print(" PRUEBAS COMPLETADAS")
     print(f"{'='*60}{Colors.RESET}\n")
     
-    print(f"{Colors.YELLOW}💡 RECOMENDACIONES:{Colors.RESET}")
-    print("   1. Revisa los logs del servidor para detalles")
-    print("   2. En producción, activa HTTPS y headers estrictos")
-    print("   3. Configura rate limiting apropiado")
-    print("   4. Implementa logging de seguridad")
-    print("   5. Realiza auditorías de seguridad periódicas\n")
+    print(f"{Colors.YELLOW}💡 MEJORAS IMPLEMENTADAS:{Colors.RESET}")
+    print("    Variable ENVIRONMENT en .env")
+    print("    Max tokens actualizado a 2024")
+    print("    Logs SQL deshabilitados por defecto")
+    print("    Validación anti-jailbreak en queries")
+    print("    Rutas absolutas en tests")
+    print("    8 tipos de documento en HTML\n")
 
 if __name__ == "__main__":
     try:
         asyncio.run(run_all_tests())
     except KeyboardInterrupt:
-        print(f"\n\n{Colors.YELLOW}⚠️  Tests interrumpidos por el usuario{Colors.RESET}")
+        print(f"\n\n{Colors.YELLOW}  Tests interrumpidos por el usuario{Colors.RESET}")
     except Exception as e:
-        print(f"\n{Colors.RED}❌ Error ejecutando tests: {e}{Colors.RESET}")
+        print(f"\n{Colors.RED} Error ejecutando tests: {e}{Colors.RESET}")

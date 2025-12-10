@@ -3,7 +3,7 @@
 
 **Desarrolladores**: Ivan Ospino, Gisell Anaya, Jhoan Smith, Jeison Mendez, Jhon Mantilla  
 **Creado**: 22-Noviembre-2025  
-**Última actualización**: Diciembre-2025
+**Última actualización**: 07-Diciembre-2025
 
 ---
 
@@ -311,17 +311,17 @@ Editar los siguientes archivos y cambiar la contraseña:
 1. `pipelines/01-create-database/script-01.py`
 ```python
 # Buscar esta línea y cambiar:
-password="sm2025"  # Tu contraseña aquí
+password="****"  # Tu contraseña aquí
 ```
 
 2. `pipelines/01-create-database/script-02.py`
 ```python
-password="sm2025"  # La misma contraseña
+password="****"  # La misma contraseña
 ```
 
 3. `pipelines/02-insert-data/create-tables.py`
 ```python
-password="sm2025"  # La misma contraseña
+password="****"  # La misma contraseña
 ```
 
 **IMPORTANTE**: Usa la misma contraseña en todos los archivos.
@@ -489,7 +489,7 @@ psql -U postgres
 
 -- Crear base de datos
 CREATE DATABASE smarthdb;
-CREATE USER sm_admin WITH PASSWORD 'sm2025';
+CREATE USER sm_admin WITH PASSWORD '****';
 GRANT ALL PRIVILEGES ON DATABASE smarthdb TO sm_admin;
 
 \c smarthdb
@@ -578,7 +578,7 @@ DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=smarthdb
 DB_USER=sm_admin
-DB_PASSWORD=sm2025
+DB_PASSWORD=****
 
 # ===================================================================
 # SEGURIDAD - CRÍTICO

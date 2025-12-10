@@ -62,7 +62,7 @@
             font-size: 14px;
         }
         
-        .form-group input {
+        .form-group input, .form-group select {
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
@@ -71,7 +71,7 @@
             transition: all 0.3s;
         }
         
-        .form-group input:focus {
+        .form-group input:focus, .form-group select:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -480,7 +480,7 @@
         <!-- Header -->
         <div class="chat-header">
             <div class="chat-header-info">
-                <h2>💬 Chat Médico IA</h2>
+                <h2>💬 Chat Médico IA v2.1</h2>
                 <p id="userEmail"></p>
             </div>
             <button class="btn-logout" onclick="handleLogout()">
@@ -491,16 +491,20 @@
         <!-- Configuración del paciente -->
         <div class="patient-config">
             <select id="docType">
-                <option value="1">CC - Cédula</option>
-                <option value="2">CE - Extranjería</option>
-                <option value="3">TI - Tarjeta Identidad</option>
+                <option value="1">CC - Cédula de Ciudadanía</option>
+                <option value="2">CE - Cédula de Extranjería</option>
+                <option value="3">TI - Tarjeta de Identidad</option>
                 <option value="4">PA - Pasaporte</option>
+                <option value="5">RC - Registro Civil</option>
+                <option value="6">MS - Menor Sin Identificar</option>
+                <option value="7">AS - Adulto Sin Identificar</option>
                 <option value="8">CD - Carné Diplomático</option>
             </select>
             <input 
                 type="text" 
                 id="docNumber" 
                 placeholder="Número de documento del paciente"
+                maxlength="50"
             >
         </div>
         
@@ -548,6 +552,7 @@ Ingresa el documento del paciente arriba y hazme tu pregunta.
                     id="messageInput" 
                     placeholder="Escribe tu pregunta aquí..."
                     onkeydown="handleKeyPress(event)"
+                    maxlength="1000"
                 ></textarea>
                 <button class="btn-send" id="sendBtn" onclick="sendMessage()">
                     🚀
